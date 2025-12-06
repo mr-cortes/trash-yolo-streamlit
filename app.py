@@ -1,65 +1,54 @@
 import streamlit as st
-from ultralytics import YOLO
+import numpy as np
 from PIL import Image
+from ultralytics import YOLO
 
 # ---------------------------------------------------------
-# 1. LOAD MODEL (With Caching)
+# LOAD MODEL (cache so it loads once only)
 # ---------------------------------------------------------
-# We use @st.cache_resource so the model loads only ONCE, 
-# not every time the user clicks a button.
 @st.cache_resource
 def load_model():
-    # Update this path to your actual best.pt file
-    return YOLO('best.pt')
+    return YOLO("best.pt")  # adjust if filename differs
 
 model = load_model()
 
 # ---------------------------------------------------------
-# 2. UI LAYOUT
+# PAGE CONFIG & UI HEADER
 # ---------------------------------------------------------
+st.set_page_config(page_title="Scrap & Metal Detector", layout="wide")
 st.title("🔩 Scrap & Metal Detector")
-st.write("Upload an image or use your camera to detect scrap.")
+st.write("Upload an image or use camera to detect scrap and metal objects.")
 
-# Sidebar for settings
+# Sidebar settings
 conf_threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.05)
 
 # ---------------------------------------------------------
-# 3. IMAGE INPUT (The "Processing" Step)
+# INPUT HANDLING (Upload or Camera)
 # ---------------------------------------------------------
-# Option 1: File Upload
-uploaded_file = st.file_uploader("Choose an image...", type=['jpg', 'jpeg', 'png'])
+uploaded_file = st.file_uploader("📁 Upload an image", type=["jpg", "jpeg", "png"])
+camera_file = st.camera_input("📸 Take a picture")
 
-# Option 2: Camera Input (Optional)
-camera_file = st.camera_input("Or take a picture")
-
-# Logic to prioritize inputs (Upload > Camera)
+# Prioritize uploaded file, fallback to camera
 image_source = uploaded_file if uploaded_file else camera_file
 
 # ---------------------------------------------------------
-# 4. PREDICTION & DISPLAY
+# RUN YOLO & DISPLAY RESULTS
 # ---------------------------------------------------------
 if image_source:
-    # STEP A: Convert Streamlit Buffer -> PIL Image
-    # This is the only "processing" you need.
+    # Convert to PIL Image
     image = Image.open(image_source)
+    st.image(image, caption="Input Image", use_container_width=True)
 
-    # Display original image
-    st.image(image, caption="Uploaded Image", use_container_width=True)
-
-    # STEP B: Run YOLO Prediction
-    if st.button("Detect Objects"):
-        with st.spinner("Analyzing..."):
-            # Run inference
+    if st.button("🔍 Detect Objects"):
+        with st.spinner("Analyzing scrap..."):
             results = model.predict(image, conf=conf_threshold)
 
-            # STEP C: Show Results
-            # Plot the results on the image (returns a numpy array)
-            res_plotted = results[0].plot()
-            
-            # Display the annotated image
-            st.image(res_plotted, caption="Detected Objects", use_container_width=True)
+            # Convert annotated BGR numpy array → RGB PIL for Streamlit
+            annotated_np = results[0].plot()
+            annotated_img = Image.fromarray(annotated_np[:, :, ::-1])
 
-            # Optional: Show counts
-            # Get the boxes from the result
+            st.image(annotated_img, caption="Detected Objects", use_container_width=True)
+
+            # Count detected objects
             boxes = results[0].boxes
-            st.success(f"Found {len(boxes)} objects!")
+            st.success(f"Detected {len(boxes)} objects!")
